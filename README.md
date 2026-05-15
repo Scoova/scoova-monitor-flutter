@@ -1,7 +1,7 @@
 # Scoova Monitor — Flutter SDK
 
 Crash reporting, analytics, performance, and battery monitoring for
-Flutter 3.0+. Works on iOS, Android, web, macOS, Windows, and Linux.
+Flutter 3.0+ apps on iOS and Android.
 
 ## Install
 
@@ -91,11 +91,12 @@ ScoovaMonitor.trackEvent('checkout_started', data: {
 ScoovaMonitor.trackScreen('ProductDetail');
 ```
 
-Or use the navigator observer in your `MaterialApp`:
+Or wire the navigator observer into your `MaterialApp` for automatic
+screen tracking:
 
 ```dart
 MaterialApp(
-  navigatorObservers: [ScoovaMonitorNavigatorObserver()],
+  navigatorObservers: [ScoovaMonitor.routeObserver],
   // …
 )
 ```
@@ -118,7 +119,7 @@ try {
 ### Breadcrumbs
 
 ```dart
-ScoovaMonitor.addBreadcrumb('Started photo upload', category: 'media');
+ScoovaMonitor.addBreadcrumb('Started photo upload', 'media');
 ```
 
 ### Tagged loggers
