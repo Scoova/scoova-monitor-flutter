@@ -149,6 +149,32 @@ await ScoovaMonitor.flush();
 The SDK auto-flushes every 5 minutes, on lifecycle pause, and when the
 batch threshold is hit — manual flush is rarely needed.
 
+## Symbolication
+
+The SDK captures **Dart** errors, so their stack traces are already
+readable in the dashboard — **unless** you ship a release built with
+`--obfuscate`, which scrambles the symbols.
+
+If you obfuscate, build with `--split-debug-info` so Flutter writes the
+per-ABI `*.symbols` files, then upload them. The dashboard de-obfuscates
+incoming crash traces for that app version automatically.
+
+```bash
+# build with obfuscation — Flutter writes app.<platform>-<arch>.symbols
+flutter build appbundle --obfuscate --split-debug-info=build/symbols
+
+# upload the symbols (the script ships in this repo, under scripts/)
+node scripts/scoova-upload-flutter-symbols.js \
+    --api-key sm_your_api_key \
+    --version 1.4.0 \
+    --build 42 \
+    --dir build/symbols
+```
+
+Run the upload step right after each release build (wire it into your CI
+or release script). It needs Node on the build machine. If you don't use
+`--obfuscate`, you can skip this entirely.
+
 ## License
 
 [Apache 2.0](LICENSE).
