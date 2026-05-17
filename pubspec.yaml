@@ -1,6 +1,6 @@
 name: scoova_monitor
 description: Scoova Monitor SDK for Flutter — crash reporting, analytics, performance, battery tracking, and logging
-version: 1.4.1
+version: 1.4.2
 homepage: https://monitor.scoo-va.info
 repository: https://github.com/Scoova/scoova-monitor-flutter
 issue_tracker: https://github.com/Scoova/scoova-monitor-flutter/issues

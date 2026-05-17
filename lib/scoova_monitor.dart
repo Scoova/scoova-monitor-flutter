@@ -24,7 +24,7 @@ import 'package:crypto/crypto.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:battery_plus/battery_plus.dart';
 
-const _sdkVersion = '1.4.0';
+const _sdkVersion = '1.4.2';
 const _httpTimeout = Duration(seconds: 10);
 const _flushInterval = Duration(minutes: 5); // radio-friendly default; flush is also triggered by batch size, AppLifecycleState.paused, and crashes (which use a separate immediate path)
 const _batchSize = 50;
@@ -148,37 +148,29 @@ class ScoovaMonitor {
     // session (failed POSTs persisted to disk) make it to the server.
     unawaited(flush());
 
-    // Auto-capture install attribution once per install. Best-effort —
-    // currently always reports "organic" / "unknown" because Flutter SDK
-    // doesn't bundle a native attribution channel. Host apps that have
-    // wired up `play_install_referrer` (Android) or `app_tracking_
-    // transparency` (iOS) can call setInstallSource() manually with the
-    // result; this default still buckets the install instead of leaving
-    // the user_profile field null.
-    unawaited(_captureInstallAttributionOnce());
+    // The Flutter SDK does not auto-detect install attribution — pure
+    // Dart can't read the Play Install Referrer or the Apple AdServices
+    // token. Rather than fabricate a source, we report nothing: the
+    // install honestly buckets as "direct" until the host calls
+    // setInstallSource() with data from its own attribution wiring.
   }
 
-  /// Auto-capture install attribution once per install.
+  /// Report install attribution for this install.
   ///
-  /// Persists a sentinel file in the app's Documents directory so
-  /// re-launches don't re-fire. Without a native attribution package
-  /// the source defaults to "organic" — that's the right baseline for
-  /// most apps that didn't arrive via paid acquisition. Hosts wanting
-  /// paid-source attribution should call [setInstallSource] from their
-  /// own attribution wiring (e.g. play_install_referrer for Android,
-  /// AdServices for iOS).
-  static Future<void> _captureInstallAttributionOnce() async {
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final flag = File('${dir.path}/sm_install_attr_done');
-      if (await flag.exists()) return;
-      trackEvent('install_info', data: {
-        'install_source': 'organic',
-        'install_campaign': '',
-        'session_number': _sessionNumber.toString(),
-      });
-      await flag.writeAsString('1');
-    } catch (_) { /* path_provider unavailable in test env */ }
+  /// The Flutter SDK can't auto-detect the install source from pure
+  /// Dart, so this is a manual hook. Call it once, early, with data
+  /// from your own attribution wiring — e.g. the `play_install_referrer`
+  /// package on Android or `AAAttribution` (AdServices) on iOS. [source]
+  /// is a short channel name ("google_ads", "facebook", "organic", ...);
+  /// [campaign] is optional. If you never call it the install reports no
+  /// source and buckets as "direct" in the dashboard.
+  static void setInstallSource(String source, {String? campaign}) {
+    if (!_initialized || source.isEmpty) return;
+    trackEvent('install_info', data: {
+      'install_source': source,
+      'install_campaign': campaign ?? '',
+      'session_number': _sessionNumber.toString(),
+    });
   }
 
   /// Track a custom event

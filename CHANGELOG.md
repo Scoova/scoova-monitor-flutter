@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.2
+
+- Install attribution: the SDK no longer auto-emits a fabricated
+  `install_source` of `"organic"` on every install (pure Dart cannot
+  read the Play Install Referrer or the Apple AdServices token). An
+  install with no measured source now buckets as "direct".
+- Added `setInstallSource(source, campaign)` — a manual hook to report
+  attribution from your own wiring (e.g. the `play_install_referrer`
+  package or `AAAttribution`), matching the iOS/Android SDKs.
+
 ## 1.4.1
 
 - Add crash symbolication for obfuscated release builds: upload the
