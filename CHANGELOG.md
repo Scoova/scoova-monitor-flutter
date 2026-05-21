@@ -4,6 +4,13 @@ All notable changes to this SDK are documented here. This package follows
 [Semantic Versioning](https://semver.org/) and the
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
+## 1.5.1 — 2026-05-21
+
+### Fixed
+- The hang/watchdog crash report now sends the `X-Bundle-Id` header,
+  like every other ingest path. The server uses it to confirm data came
+  from the app registered to the API key.
+
 ## 1.5.0 — 2026-05-21
 
 ### Added

@@ -9,7 +9,7 @@ Add to `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  scoova_monitor: ^1.5.0
+  scoova_monitor: ^1.5.1
 ```
 
 Then:

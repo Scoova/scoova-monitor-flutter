@@ -24,7 +24,7 @@ import 'package:crypto/crypto.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:battery_plus/battery_plus.dart';
 
-const _sdkVersion = '1.5.0';
+const _sdkVersion = '1.5.1';
 const _httpTimeout = Duration(seconds: 10);
 const _flushInterval = Duration(minutes: 5); // radio-friendly default; flush is also triggered by batch size, AppLifecycleState.paused, and crashes (which use a separate immediate path)
 const _batchSize = 50;
@@ -415,6 +415,7 @@ class ScoovaMonitor {
               headers: {
                 'Content-Type': 'application/json',
                 'X-API-Key': apiKey,
+                'X-Bundle-Id': _bundleId,
               },
               body: jsonEncode(payload),
             )
