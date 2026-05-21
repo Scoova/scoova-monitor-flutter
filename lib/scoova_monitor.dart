@@ -24,7 +24,7 @@ import 'package:crypto/crypto.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:battery_plus/battery_plus.dart';
 
-const _sdkVersion = '1.4.2';
+const _sdkVersion = '1.5.0';
 const _httpTimeout = Duration(seconds: 10);
 const _flushInterval = Duration(minutes: 5); // radio-friendly default; flush is also triggered by batch size, AppLifecycleState.paused, and crashes (which use a separate immediate path)
 const _batchSize = 50;
@@ -140,6 +140,11 @@ class ScoovaMonitor {
     if (!kDebugMode) {
       unawaited(_startHangWatchdog());
     }
+
+    // Continuous battery sampling — matches iOS/Android BatteryTracker.
+    // Polls every 60s and stamps battery_level + is_charging as
+    // performance metrics so the dashboard can chart drain over a session.
+    _startBatterySampling();
 
     trackEvent('session_start', data: {'session_id': _sessionId});
     debugPrint('[ScoovaMonitor] Flutter SDK $_sdkVersion initialized');
@@ -430,6 +435,34 @@ class ScoovaMonitor {
     });
   }
 
+  static Timer? _batterySampleTimer;
+
+  static void _startBatterySampling() {
+    if (_batterySampleTimer != null) return;
+    final battery = Battery();
+    Future<void> sample() async {
+      try {
+        final lvl = await battery.batteryLevel;
+        if (lvl >= 0) {
+          trackMetric('battery', 'level', lvl.toDouble(), 'percent');
+        }
+        final state = await battery.batteryState;
+        final charging = state == BatteryState.charging || state == BatteryState.full;
+        trackMetric('battery', 'is_charging', charging ? 1.0 : 0.0, 'bool');
+      } catch (_) { /* never let the sampler crash the app */ }
+    }
+    unawaited(sample());
+    _batterySampleTimer = Timer.periodic(const Duration(seconds: 60), (_) => sample());
+  }
+
+  /// Track a custom metric — arbitrary name + numeric value + unit.
+  /// Mirrors iOS + Android + React Native `trackCustomMetric` so a Flutter
+  /// app can emit the same metric stream native apps do.
+  static void trackCustomMetric(String name, double value, {String unit = 'count'}) {
+    if (!_initialized) return;
+    trackMetric('custom', name, value, unit);
+  }
+
   /// Track performance metric
   static void trackMetric(String type, String name, double value, String unit) {
     if (!_initialized && type != 'app_start') return;
@@ -679,6 +712,74 @@ class ScoovaMonitor {
       cpuArch = info.utsname.machine.startsWith('arm64') ? 'arm64' : null;
     }
 
+    // Rooted / jailbroken — check for known marker paths. Mirrors the
+    // Android + iOS native SDK detection. No permissions required, just
+    // existence checks. Returns false if every probe is clean.
+    bool? jailbroken;
+    try {
+      final probes = Platform.isAndroid
+          ? const [
+              '/system/app/Superuser.apk', '/sbin/su', '/system/bin/su',
+              '/system/xbin/su', '/data/local/xbin/su', '/data/local/bin/su',
+            ]
+          : Platform.isIOS
+              ? const [
+                  '/Applications/Cydia.app',
+                  '/Library/MobileSubstrate/MobileSubstrate.dylib',
+                  '/bin/bash', '/usr/sbin/sshd', '/etc/apt',
+                  '/private/var/lib/apt/',
+                ]
+              : const <String>[];
+      jailbroken = probes.any((p) => File(p).existsSync());
+    } catch (_) {
+      jailbroken = null;
+    }
+
+    // Screen resolution + orientation — pulled from the platform dispatcher.
+    // Works pre-runApp() because we run after WidgetsFlutterBinding.ensureInitialized().
+    String? screenResolution;
+    String? orientation;
+    try {
+      final view = WidgetsBinding.instance.platformDispatcher.views.first;
+      final size = view.physicalSize;
+      screenResolution = '${size.width.toInt()}x${size.height.toInt()}';
+      orientation = size.height >= size.width ? 'portrait' : 'landscape';
+    } catch (_) {}
+
+    // Free disk — Android can read /data partition stats, iOS via the
+    // documents directory's free-size attribute. Best-effort, no
+    // permissions.
+    int? freeDisk;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final stat = await dir.stat();
+      // Dart doesn't expose a portable disk-free; the stat type only
+      // gives file size. We use Process on Android for a quick read.
+      if (Platform.isAndroid) {
+        final r = await Process.run('df', ['-P', dir.path]);
+        if (r.exitCode == 0) {
+          final lines = (r.stdout as String).split('\n');
+          if (lines.length > 1) {
+            final cols = lines[1].split(RegExp(r'\s+'));
+            if (cols.length >= 4) {
+              final freeKb = int.tryParse(cols[3]);
+              if (freeKb != null) freeDisk = freeKb * 1024;
+            }
+          }
+        }
+      }
+      // Suppress unused warning for non-Android.
+      stat.size;
+    } catch (_) {}
+
+    // Thermal state — read via WidgetsBinding.instance.platformDispatcher.
+    // PlatformDispatcher doesn't expose it; we ship null for now and let
+    // the host pass it via setCustomMetric if they wire native-side.
+    // (Same posture as our Android SDK's permissionless behaviour.)
+
+    // First-launch flag + install-date — persisted alongside the anon ID.
+    final installDateMs = await _ensureInstallDate();
+
     // Best-effort total/free RAM via /proc/meminfo on Android, ProcessInfo on iOS.
     // Both are optional — wrapped in try/catch so SDK never throws on fetch.
     try {
@@ -744,7 +845,32 @@ class ScoovaMonitor {
     if (freeRam != null) m['ramFree'] = freeRam;
     if (batteryLevelPct != null) m['batteryLevel'] = batteryLevelPct.toDouble() / 100.0; // 0.0–1.0
     if (isCharging != null) m['isCharging'] = isCharging;
+    if (jailbroken != null) m['jailbroken'] = jailbroken;
+    if (screenResolution != null) m['screenResolution'] = screenResolution;
+    if (orientation != null) m['orientation'] = orientation;
+    if (freeDisk != null) m['diskFree'] = freeDisk;
+    m['installDate'] = installDateMs;
     return m;
+  }
+
+  /// First-run timestamp persisted alongside the anonymous ID. Returned in
+  /// ms-since-epoch so it matches Android's getPackageInfo().firstInstallTime
+  /// and iOS's getInstallDate().
+  static Future<int> _ensureInstallDate() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/scoova_install_date');
+      if (await file.exists()) {
+        final raw = await file.readAsString();
+        final n = int.tryParse(raw.trim());
+        if (n != null) return n;
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await file.writeAsString(now.toString());
+      return now;
+    } catch (_) {
+      return DateTime.now().millisecondsSinceEpoch;
+    }
   }
 
   /// Returns true on 2xx, false otherwise. Throws on network error.

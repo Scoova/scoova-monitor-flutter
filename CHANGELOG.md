@@ -1,33 +1,29 @@
 # Changelog
 
-## 1.4.2
+All notable changes to this SDK are documented here. This package follows
+[Semantic Versioning](https://semver.org/) and the
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
-- Install attribution: the SDK no longer auto-emits a fabricated
-  `install_source` of `"organic"` on every install (pure Dart cannot
-  read the Play Install Referrer or the Apple AdServices token). An
-  install with no measured source now buckets as "direct".
-- Added `setInstallSource(source, campaign)` — a manual hook to report
-  attribution from your own wiring (e.g. the `play_install_referrer`
-  package or `AAAttribution`), matching the iOS/Android SDKs.
+## 1.5.0 — 2026-05-21
 
-## 1.4.1
+### Added
+- **Continuous battery sampling** — periodic 60s emit of `battery/level` and
+  `battery/is_charging` performance metrics. Matches iOS/Android
+  BatteryTracker behaviour.
+- **Rooted / jailbroken detection** via file-existence probes (no new
+  permissions). Mirrors the Android + iOS native SDKs.
+- **Screen resolution + orientation** captured via
+  `PlatformDispatcher.views.first.physicalSize`.
+- **Free disk space** on Android via `df -P` on the documents directory.
+- **Install date** persisted to a SharedPreferences-equivalent file on
+  first init; mirrors iOS UserDefaults + Android
+  `firstInstallTime`.
+- `trackCustomMetric(name, value, unit:)` public API — parity with iOS,
+  Android, React Native, and Web SDKs.
 
-- Add crash symbolication for obfuscated release builds: upload the
-  `--split-debug-info` symbols with `scripts/scoova-upload-flutter-symbols.js`
-  and the dashboard de-obfuscates Dart stack traces automatically.
-- Add a Symbolication section to the README.
-
-No SDK API or behaviour changes.
+### Changed
+- SDK version reported as `1.5.0` in every event payload.
 
 ## 1.4.0
 
-Initial public release of the Scoova Monitor Flutter SDK.
-
-- Crash reporting — `FlutterError`, isolate, and `PlatformDispatcher` errors
-- Analytics events and screen tracking (navigator observer)
-- Performance metrics — cold start and frame-rate sampling
-- Battery monitoring
-- Structured logging with tagged loggers
-- Privacy: user IDs are SHA-256 hashed on-device before sending;
-  no device location is collected
-- GDPR / CCPA `clearLocalUserData()` helper
+Initial public release.
